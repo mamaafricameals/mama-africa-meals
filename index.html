@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script src="https://js.stripe.com/v3/"></script>
 <style>
 :root {
   --gold: #C8922A;
@@ -631,44 +630,23 @@ footer strong { color: var(--gold-light); cursor: default; }
       <!-- PAYMENT METHOD -->
       <div class="form-group">
         <label>Payment Method</label>
-        <div class="payment-method-tabs">
-          <div class="pay-tab active" id="pay-tab-card">💳 Pay by Card</div>
-          <div class="pay-tab" id="pay-tab-mobile">📱 Venmo / CashApp</div>
-        </div>
-
-        <!-- CARD PAYMENT -->
-        <div class="pay-panel active" id="pay-panel-card">
-          <div class="pay-warning">
-            <strong>🔒 Secure card payment.</strong> Your card is charged when you submit. Order stays <strong>Pending</strong> until we confirm it.
+        <div class="qr-payment-box">
+          <h4>Pay via Venmo or CashApp</h4>
+          <div class="qr-tabs">
+            <div class="qr-tab active" id="qr-tab-venmo">Venmo</div>
+            <div class="qr-tab" id="qr-tab-cashapp">CashApp</div>
           </div>
-          <label class="form-group" style="font-size:0.73rem;letter-spacing:2px;text-transform:uppercase;font-weight:700;color:var(--text-light);margin-bottom:7px;display:block">Card Details</label>
-          <div class="card-field-box" id="card-element"></div>
-          <div class="card-error" id="card-error"></div>
-        </div>
-
-        <!-- VENMO / CASHAPP PAYMENT -->
-        <div class="pay-panel" id="pay-panel-mobile">
-          <div class="pay-warning">
-            <strong>⚠️ Important:</strong> You must pay <strong>before</strong> your order is confirmed. Send payment immediately after placing your order. Include your name in the note.
+          <div id="qr-venmo-info" class="qr-info">
+            <div style="font-size:0.8rem;color:var(--text-light)">Send payment to</div>
+            <div class="qr-handle">@Saikou-Kolley</div>
+            <div class="qr-note">Open Venmo app → Search @Saikou-Kolley → Send exact total → Add your name in note</div>
           </div>
-          <div class="qr-payment-box">
-            <h4>Choose how to pay</h4>
-            <div class="qr-tabs">
-              <div class="qr-tab active" id="qr-tab-venmo">Venmo</div>
-              <div class="qr-tab" id="qr-tab-cashapp">CashApp</div>
-            </div>
-            <div id="qr-venmo-info" class="qr-info">
-              <div style="font-size:0.8rem;color:var(--text-light)">Send payment to</div>
-              <div class="qr-handle">@Saikou-Kolley</div>
-              <div class="qr-note">Open Venmo app → Search @Saikou-Kolley → Send exact total → Add your name in note</div>
-            </div>
-            <div id="qr-cashapp-info" class="qr-info" style="display:none">
-              <div style="font-size:0.8rem;color:var(--text-light)">Send payment to</div>
-              <div class="qr-handle">$1kolley</div>
-              <div class="qr-note">Open CashApp → Search $1kolley → Send exact total → Add your name in note</div>
-            </div>
-            <p style="font-size:0.82rem;color:var(--red);font-weight:700">Your order will NOT be confirmed until payment is received.</p>
+          <div id="qr-cashapp-info" class="qr-info" style="display:none">
+            <div style="font-size:0.8rem;color:var(--text-light)">Send payment to</div>
+            <div class="qr-handle">$1kolley</div>
+            <div class="qr-note">Open CashApp → Search $1kolley → Send exact total → Add your name in note</div>
           </div>
+          <p style="font-size:0.82rem;color:var(--red);font-weight:700">Your order will NOT be confirmed until payment is received.</p>
         </div>
       </div>
 
@@ -679,6 +657,18 @@ footer strong { color: var(--gold-light); cursor: default; }
         <div class="pending-icon">⏳</div>
         <h3>Order Placed!</h3>
         <div class="pending-badge">⏳ PENDING PAYMENT CONFIRMATION</div>
+        <div class="order-box">
+          <h3>Customer Details</h3>
+          <div class="detail-row"><span>Name</span><span id="confirm-name">—</span></div>
+          <div class="detail-row"><span>Phone</span><span id="confirm-phone">—</span></div>
+          <div class="detail-row"><span>Email</span><span id="confirm-email">—</span></div>
+          <div class="detail-row"><span>Time</span><span id="confirm-time">—</span></div>
+          <div class="detail-row" style="border-top:1px solid #E8D5B0;padding-top:8px;margin-top:4px;font-weight:700"><span>Total</span><span id="confirm-total" style="color:#C8922A">—</span></div>
+        </div>
+        <div class="order-box">
+          <h3>Order Summary</h3>
+          <div class="items-box" id="confirm-items">—</div>
+        </div>
         <p id="pending-message">Your order has been received. Please complete your payment now. We will confirm your order once payment is verified and text you when your food is ready.</p>
         <p style="margin-top:14px;font-size:0.82rem;color:#aaa">Usually confirmed within 5-10 minutes.</p>
       </div>
@@ -781,15 +771,12 @@ var EJS_TPL  = "template_wu2q11v";
 var EJS_KEY  = "u95v6QYexfOr-Jg5A";
 var EJS_TO   = "mamaafricameals@gmail.com";
 var EJS_TPL_RECEIPT = "template_u3racs7";
+var SITE_URL = "https://mamaafricameals.netlify.app";
 
 // ============================================================
 // MENU DATA
 // ============================================================
 // Stripe - replace with your real publishable key from stripe.com/dashboard
-var STRIPE_KEY = "pk_test_YOUR_STRIPE_KEY_HERE";
-var stripe = null;
-var cardElement = null;
-var paymentMethod = "card"; // "card" or "mobile"
 var qrMethod = "venmo"; // "venmo" or "cashapp"
 
 // Store open/closed state
@@ -826,7 +813,11 @@ function setStoreStatus(isOpen, reason) {
 function loadStoreStatus() {
   var saved = localStorage.getItem("mama_store_open");
   var reason = localStorage.getItem("mama_store_reason") || "";
-  if (saved === "0") setStoreStatus(false, reason);
+  if (saved === "0") {
+    setStoreStatus(false, reason);
+  } else {
+    setStoreStatus(true, reason);
+  }
 }
 
 var MENU = [
@@ -1270,38 +1261,17 @@ function renderCart() {
 // ============================================================
 // SUBMIT ORDER
 // ============================================================
-function initStripe() {
-  if (STRIPE_KEY === "pk_test_YOUR_STRIPE_KEY_HERE") return;
-  try {
-    stripe = Stripe(STRIPE_KEY);
-    var elements = stripe.elements();
-    cardElement = elements.create("card", {
-      style: {
-        base: { fontFamily: "Lato, sans-serif", fontSize: "16px", color: "#2C1A00" },
-        invalid: { color: "#B03A2E" }
-      }
-    });
-    cardElement.mount("#card-element");
-    cardElement.on("focus", function() { document.getElementById("card-element").classList.add("focused"); });
-    cardElement.on("blur",  function() { document.getElementById("card-element").classList.remove("focused"); });
-    cardElement.on("change", function(e) {
-      document.getElementById("card-error").textContent = e.error ? e.error.message : "";
-    });
-  } catch(e) { console.log("Stripe init:", e); }
-}
-
-function showPendingScreen(name, method, total) {
+function showPendingScreen(name, phone, email, time, total, lines) {
   // Hide the form elements
   document.getElementById("submit-btn").style.display = "none";
   var pending = document.getElementById("pending-screen");
   pending.classList.add("show");
-  var msg = "";
-  if (method === "card") {
-    msg = "Your card has been charged $" + total + ". Your order is now pending confirmation. We will text you at the number provided once confirmed.";
-  } else {
-    var handle = qrMethod === "venmo" ? "@Saikou-Kolley on Venmo" : "$1kolley on CashApp";
-    msg = "Please send $" + total + " to " + handle + " right now with your name in the note. Your order is pending until we verify payment.";
-  }
+  document.getElementById("confirm-name").textContent = name;
+  document.getElementById("confirm-phone").textContent = phone || "Not provided";
+  document.getElementById("confirm-email").textContent = email || "Not provided";
+  document.getElementById("confirm-time").textContent = time || "Not provided";
+  document.getElementById("confirm-total").textContent = "$" + total;
+  document.getElementById("confirm-items").textContent = lines;
   document.getElementById("pending-message").textContent = msg;
 }
 
@@ -1323,17 +1293,32 @@ function submitOrder() {
     if (cart[i].detail) lines += " (" + cart[i].detail + ")";
     lines += " - $" + (cart[i].price * cart[i].qty).toFixed(2) + "\n";
   }
-  if (t.fee)  lines += "Delivery fee: $3.00\n";
+  if (t.fee)  lines += "Delivery fee: $10.00\n";
   if (t.disc) lines += "Discount (" + appliedDiscount.code + "): -$" + t.disc.toFixed(2) + "\n";
   lines += "---\nTOTAL: $" + t.total.toFixed(2);
 
-  var payLabel = paymentMethod === "card" ? "Card Payment" : (qrMethod === "venmo" ? "Venmo (@Saikou-Kolley)" : "CashApp ($1kolley)");
+  var payLabel = qrMethod === "venmo" ? "Venmo (@Saikou-Kolley)" : "CashApp ($1kolley)";
   var fullLines = lines + "\nPayment Method: " + payLabel;
 
   var btn = document.getElementById("submit-btn");
 
   function sendEmails(payStatus) {
     emailjs.init(EJS_KEY);
+    var pathBase = window.location.pathname;
+    if (!pathBase.endsWith("/")) {
+      pathBase = pathBase.replace(/\/[^\/]*$/, "/");
+    }
+    var baseUrl = window.location.protocol.indexOf("http") === 0
+      ? window.location.origin + pathBase
+      : SITE_URL + "/";
+    var confirmUrl = baseUrl + "confirm.html?name=" + encodeURIComponent(name) +
+                     "&phone=" + encodeURIComponent(phone) +
+                     "&email=" + encodeURIComponent(email) +
+                     "&time=" + encodeURIComponent(time) +
+                     "&total=" + encodeURIComponent(t.total.toFixed(2));
+    var adminItems = fullLines + "\n\nConfirm payment here: " + confirmUrl +
+                     "\n\n(Full order details are in the restaurant email.)\n";
+
     emailjs.send(EJS_SVC, EJS_TPL, {
       to_email:    EJS_TO,
       order_name:  name,
@@ -1341,7 +1326,7 @@ function submitOrder() {
       order_email: email || "Not provided",
       order_type:  deliveryMode === "delivery" ? "Delivery to: " + addr : "Pickup",
       order_time:  time,
-      order_items: fullLines + "\nStatus: " + payStatus,
+      order_items: adminItems + "\nStatus: " + payStatus,
       order_notes: notes || "None",
       order_total: "$" + t.total.toFixed(2)
     });
@@ -1357,30 +1342,6 @@ function submitOrder() {
     }
   }
 
-  // CARD PAYMENT
-  if (paymentMethod === "card") {
-    if (!stripe || !cardElement) {
-      showToast("Card payments not set up yet. Please use Venmo or CashApp.");
-      return;
-    }
-    btn.textContent = "Processing payment...";
-    btn.disabled = true;
-    stripe.createPaymentMethod({ type:"card", card:cardElement, billing_details:{ name:name } }).then(function(result) {
-      if (result.error) {
-        document.getElementById("card-error").textContent = result.error.message;
-        btn.textContent = "Place Order & Pay →";
-        btn.disabled = false;
-      } else {
-        sendEmails("CARD — Payment Method ID: " + result.paymentMethod.id);
-        cart = []; appliedDiscount = null;
-        renderCart();
-        showPendingScreen(name, "card", t.total.toFixed(2));
-      }
-    });
-    return;
-  }
-
-  // VENMO / CASHAPP PAYMENT
   btn.textContent = "Placing order...";
   btn.disabled = true;
   sendEmails("PENDING — awaiting " + payLabel + " payment of $" + t.total.toFixed(2));
@@ -1389,7 +1350,7 @@ function submitOrder() {
     document.getElementById("discount-code").value = "";
     document.getElementById("discount-ok").style.display = "none";
     renderCart();
-    showPendingScreen(name, "mobile", t.total.toFixed(2));
+    showPendingScreen(name, phone, email, time, t.total.toFixed(2), lines);
   }, 800);
 }
 
@@ -2186,22 +2147,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // Payment method tabs
-  document.getElementById("pay-tab-card").addEventListener("click", function() {
-    paymentMethod = "card";
-    document.getElementById("pay-tab-card").classList.add("active");
-    document.getElementById("pay-tab-mobile").classList.remove("active");
-    document.getElementById("pay-panel-card").classList.add("active");
-    document.getElementById("pay-panel-mobile").classList.remove("active");
-  });
-  document.getElementById("pay-tab-mobile").addEventListener("click", function() {
-    paymentMethod = "mobile";
-    document.getElementById("pay-tab-mobile").classList.add("active");
-    document.getElementById("pay-tab-card").classList.remove("active");
-    document.getElementById("pay-panel-mobile").classList.add("active");
-    document.getElementById("pay-panel-card").classList.remove("active");
-  });
-
   // Venmo / CashApp QR tabs
   document.getElementById("qr-tab-venmo").addEventListener("click", function() {
     qrMethod = "venmo";
@@ -2217,9 +2162,6 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("qr-cashapp-info").style.display = "block";
     document.getElementById("qr-venmo-info").style.display = "none";
   });
-
-  // Init Stripe
-  initStripe();
 
   // Secret admin access — keyboard
   document.addEventListener("keydown", function(e) {
