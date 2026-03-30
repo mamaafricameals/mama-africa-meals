@@ -790,6 +790,11 @@ footer strong { color: var(--gold-light); cursor: default; }
 </div>
 
 <script>
+
+var STRIPE_KEY = '';
+var stripe = null;
+var cardElement = null;
+
 // ============================================================
 // CONFIG
 // ============================================================
@@ -1349,40 +1354,9 @@ function renderCart() {
 // ============================================================
 // SUBMIT ORDER
 // ============================================================
-function initStripe_DISABLED() {
-  if (STRIPE_KEY === "pk_test_51TFO2GKBoo9AGkUUwNkucikgKojTW3bRgJOqYtg2wtFz9NDerVlKrL2oH3JiF6K07TbC2DcCyvC121bil7W6FLMx006bDtFeh0") return;
-  try {
-    stripe = Stripe(STRIPE_KEY);
-    var elements = stripe.elements();
-    cardElement = elements.create("card", {
-      style: {
-        base: { fontFamily: "Lato, sans-serif", fontSize: "16px", color: "#2C1A00" },
-        invalid: { color: "#B03A2E" }
-      }
-    });
-    cardElement.mount("#card-element");
-    cardElement.on("focus", function() { document.getElementById("card-element").classList.add("focused"); });
-    cardElement.on("blur",  function() { document.getElementById("card-element").classList.remove("focused"); });
-    cardElement.on("change", function(e) {
-      document.getElementById("card-error").textContent = e.error ? e.error.message : "";
-    });
-  } catch(e) { console.log("Stripe init:", e); }
-}
+// Stripe removed
 
-function showPendingScreen(name, method, total) {
-  // Hide the form elements
-  document.getElementById("submit-btn").style.display = "none";
-  var pending = document.getElementById("pending-screen");
-  pending.classList.add("show");
-  var msg = "";
-  if (method === "card") {
-    msg = "Your card has been charged $" + total + ". Your order is now pending confirmation. We will text you at the number provided once confirmed.";
-  } else {
-    var handle = qrMethod === "venmo" ? "@Saikou-Kolley on Venmo" : "$1kolley on CashApp";
-    msg = "Please send $" + total + " to " + handle + " right now with your name in the note. Your order is pending until we verify payment.";
-  }
-  document.getElementById("pending-message").textContent = msg;
-}
+// showPendingScreen removed
 
 function submitOrder() {
   // Final safety check - block orders if store is closed
@@ -1480,9 +1454,7 @@ function submitOrder() {
     var pendingMsg = "";
     if (deliveryMode === "delivery") {
       pendingMsg = "Your order has been received! Please send $" + t.total.toFixed(2) +
-        " (food total) to " + handle + " with your name in the note.
-
-" +
+        " (food total) to " + handle + " with your name in the note. " +
         "DELIVERY NOTE: We will contact you shortly to confirm the delivery fee based on your distance. " +
         "You will receive a confirmation email with the final total once we verify payment and agree on the delivery fee.";
     } else {
@@ -2753,6 +2725,6 @@ document.addEventListener("DOMContentLoaded", function() {
   renderBuilder();
   loadStoreStatus();
 });
+
+
 </script>
-</body>
-</html>
