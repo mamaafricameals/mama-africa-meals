@@ -1477,8 +1477,19 @@ function submitOrder() {
 
   setTimeout(function() {
     var handle = paymentMethod === "venmo" ? "@Saikou-Kolley on Venmo" : "$1kolley on CashApp";
-    document.getElementById("pending-message").textContent =
-      "Please send $" + t.total.toFixed(2) + " to " + handle + " right now with your name in the note. We will confirm your order once payment is received and text you when your food is ready!";
+    var pendingMsg = "";
+    if (deliveryMode === "delivery") {
+      pendingMsg = "Your order has been received! Please send $" + t.total.toFixed(2) +
+        " (food total) to " + handle + " with your name in the note.
+
+" +
+        "DELIVERY NOTE: We will contact you shortly to confirm the delivery fee based on your distance. " +
+        "You will receive a confirmation email with the final total once we verify payment and agree on the delivery fee.";
+    } else {
+      pendingMsg = "Please send $" + t.total.toFixed(2) + " to " + handle +
+        " right now with your name in the note. We will confirm your order once payment is received!";
+    }
+    document.getElementById("pending-message").textContent = pendingMsg;
     cart = []; appliedDiscount = null;
     document.getElementById("discount-code").value = "";
     document.getElementById("discount-ok").style.display = "none";
@@ -2640,6 +2651,8 @@ document.addEventListener("DOMContentLoaded", function() {
     okEl.style.display = "none";
     errEl.style.display = "none";
     if (!code) return;
+    // Always re-read from localStorage so newly created codes work immediately
+    discountCodes = JSON.parse(localStorage.getItem("mama_codes") || "[]");
     var found = null;
     for (var i = 0; i < discountCodes.length; i++) {
       if (discountCodes[i].code === code) { found = discountCodes[i]; break; }
