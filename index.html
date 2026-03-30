@@ -630,7 +630,7 @@ footer strong { color: var(--gold-light); cursor: default; }
         <label>Pickup or Delivery?</label>
         <div class="delivery-opts">
           <div class="delivery-opt active" data-mode="pickup">🏃 Pickup</div>
-          <div class="delivery-opt" id="delivery-opt-label" data-mode="delivery">🛵 Delivery (+$3)</div>
+          <div class="delivery-opt" id="delivery-opt-label" data-mode="delivery">🛵 Delivery</div>
         </div>
       </div>
       <div class="form-group" id="address-group" style="display:none">
@@ -1315,7 +1315,7 @@ function showMonoOptions(item) {
 function calcTotals() {
   var sub = 0;
   for (var i = 0; i < cart.length; i++) sub += cart[i].price * cart[i].qty;
-  var fee = deliveryMode === "delivery" ? DELIVERY_FEE : 0;
+  var fee = 0; // Delivery fee added manually by owner after checking distance
   var disc = 0;
   if (appliedDiscount) {
     disc = appliedDiscount.type === "percent"
@@ -1339,7 +1339,7 @@ function renderCart() {
     if (c.detail) html += "<small style='display:block;color:var(--text-light);font-size:0.8rem'>" + c.detail + "</small>";
     html += "</span><span>$" + (c.price * c.qty).toFixed(2) + "</span></div>";
   }
-  if (t.fee) html += "<div class='cart-line'><span>Delivery fee</span><span>$" + t.fee.toFixed(2) + "</span></div>";
+  // Delivery fee is determined by owner based on distance - not shown here
   if (t.disc) html += "<div class='cart-line' style='color:#4ADE80'><span>Discount (" + appliedDiscount.code + ")</span><span>-$" + t.disc.toFixed(2) + "</span></div>";
   html += "<div class='cart-divider'><span>Total</span><span>$" + t.total.toFixed(2) + "</span></div>";
   el.innerHTML = html;
@@ -1722,13 +1722,13 @@ function buildStorePanel() {
 
   var feeTitle = document.createElement("div");
   feeTitle.style.cssText = "font-size:0.68rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);font-weight:700;padding-bottom:10px;border-bottom:1px solid rgba(200,146,42,0.2);margin-bottom:14px";
-  feeTitle.textContent = "🛵 Delivery Fee";
+  feeTitle.textContent = "🛵 Delivery Fee (charged per order)";
 
   var feeRow = document.createElement("div");
   feeRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px";
 
   var feeLabel = document.createElement("div");
-  feeLabel.innerHTML = "<div style='color:#E8D5B0;font-weight:700'>Current Delivery Fee</div><div style='color:#7A5C3A;font-size:0.8rem;margin-top:2px'>Customers see this added to their total</div>";
+  feeLabel.innerHTML = "<div style='color:#E8D5B0;font-weight:700'>Default Delivery Fee</div><div style='color:#7A5C3A;font-size:0.8rem;margin-top:2px'>Use this as a starting point. Actual fee is set per order based on distance.</div>";
 
   var feeRight = document.createElement("div");
   feeRight.style.cssText = "display:flex;align-items:center;gap:8px";
@@ -1925,10 +1925,36 @@ function renderOrdersList(orders, filter, panel, onFilter) {
     actionsDiv.className = "order-actions";
 
     if (st === "pending") {
+      // Delivery fee input for delivery orders
+      if (order.type && order.type.indexOf("Delivery") > -1) {
+        var feeWrapper = document.createElement("div");
+        feeWrapper.style.cssText = "display:flex;align-items:center;gap:6px;width:100%;margin-bottom:8px;background:rgba(200,146,42,0.08);border:1px solid rgba(200,146,42,0.2);border-radius:4px;padding:8px 10px";
+        feeWrapper.innerHTML = "<span style='color:#C8A97A;font-size:0.82rem;white-space:nowrap'>Delivery fee: $</span>";
+        var feeInp = document.createElement("input");
+        feeInp.type = "number";
+        feeInp.min = "0";
+        feeInp.step = "0.5";
+        feeInp.value = "3.00";
+        feeInp.placeholder = "0.00";
+        feeInp.style.cssText = "width:70px;padding:5px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(200,146,42,0.3);border-radius:2px;color:#E8D5B0;font-size:0.9rem;text-align:center;font-family:Lato,sans-serif";
+        feeWrapper.appendChild(feeInp);
+        var feeNote = document.createElement("span");
+        feeNote.style.cssText = "color:#7A5C3A;font-size:0.75rem";
+        feeNote.textContent = "(charge to customer)";
+        feeWrapper.appendChild(feeNote);
+        actionsDiv.appendChild(feeWrapper);
+      }
       var confirmBtn = document.createElement("button");
       confirmBtn.className = "o-btn confirm";
-      confirmBtn.textContent = "Confirm";
-      (function(id) { confirmBtn.addEventListener("click", function() { updateOrderStatus(id, "confirmed"); }); })(order.id);
+      confirmBtn.textContent = "Confirm Order";
+      (function(id, ord) {
+        confirmBtn.addEventListener("click", function() {
+          var delivFee = 0;
+          var feeInput = actionsDiv.querySelector("input[type='number']");
+          if (feeInput) delivFee = parseFloat(feeInput.value) || 0;
+          updateOrderStatus(id, "confirmed", delivFee, ord);
+        });
+      })(order.id, order);
       actionsDiv.appendChild(confirmBtn);
     }
     if (st === "confirmed") {
@@ -1968,6 +1994,56 @@ function renderOrdersList(orders, filter, panel, onFilter) {
   });
 }
 
+
+function updateOrderStatus(orderId, newStatus, deliveryFee, orderData) {
+  if (!firebaseDB) { showToast("Firebase not connected"); return; }
+  var updates = { status: newStatus };
+  if (deliveryFee && deliveryFee > 0) updates.deliveryFee = deliveryFee;
+  firebaseDB.ref("orders/" + orderId).update(updates);
+  showToast("Order " + newStatus + "!");
+
+  if (newStatus === "confirmed") {
+    firebaseDB.ref("orders/" + orderId).once("value", function(snap) {
+      var order = snap.val();
+      if (!order) return;
+      var delivNote = "";
+      var finalTotal = order.total || "$0";
+      if (deliveryFee && deliveryFee > 0) {
+        var base = parseFloat((order.total || "$0").replace("$","")) || 0;
+        var newTotal = base + deliveryFee;
+        finalTotal = "$" + newTotal.toFixed(2);
+        delivNote = "\n\nDelivery Fee: $" + deliveryFee.toFixed(2) + "\nNew Total: " + finalTotal;
+      }
+      if (order.email) {
+        emailjs.init(EJS_KEY);
+        emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
+          customer_name:  order.name,
+          customer_email: order.email,
+          order_items:    order.items + delivNote + "\n\nPAYMENT CONFIRMED — Your order is now being prepared!",
+          order_type:     order.type,
+          order_time:     order.time,
+          order_total:    finalTotal
+        });
+      }
+    });
+  }
+
+  if (newStatus === "ready") {
+    firebaseDB.ref("orders/" + orderId).once("value", function(snap) {
+      var order = snap.val();
+      if (!order || !order.email) return;
+      emailjs.init(EJS_KEY);
+      emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
+        customer_name:  order.name,
+        customer_email: order.email,
+        order_items:    order.items + "\n\nYOUR ORDER IS READY! Please come pick it up or your delivery is on the way!",
+        order_type:     order.type,
+        order_time:     order.time,
+        order_total:    order.total
+      });
+    });
+  }
+}
 
 function buildMenuPanel() {
   var panel = document.getElementById("panel-menu");
