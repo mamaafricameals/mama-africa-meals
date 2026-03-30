@@ -798,7 +798,8 @@ var EJS_SVC  = "service_hka7e02";
 var EJS_TPL  = "template_wu2q11v";
 var EJS_KEY  = "u95v6QYexfOr-Jg5A";
 var EJS_TO   = "mamaafricameals@gmail.com";
-var EJS_TPL_RECEIPT  = "template_u3racs7";
+var EJS_TPL_RECEIPT  = "template_u3racs7"; // Order received email (sent to customer immediately)
+var EJS_TPL_CONFIRM  = "template_u3racs7"; // Confirmation/cancellation email (same template for now - update in EmailJS)
 var EJS_TPL_CONFIRM  = "template_u3racs7"; // Same receipt template reused for confirmation
 
 // ============================================================
@@ -1461,13 +1462,16 @@ function submitOrder() {
   });
 
   if (email) {
+    // First email - order received, pending confirmation
     emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
       customer_name:  name,
       customer_email: email,
-      order_items:    lines,
+      order_items:    "ORDER RECEIVED - PENDING CONFIRMATION\n\n" + lines +
+        (deliveryMode === "delivery" ? "\n\nDELIVERY NOTE: Your delivery fee will be calculated based on your distance and communicated to you before your order is confirmed." : "") +
+        "\n\n---\nWe have received your order and will confirm it shortly after verifying your payment. You will receive another email once confirmed.",
       order_type:     deliveryMode === "delivery" ? "Delivery to: " + addr : "Pickup",
       order_time:     time,
-      order_total:    "$" + t.total.toFixed(2)
+      order_total:    "$" + t.total.toFixed(2) + (deliveryMode === "delivery" ? " + delivery fee (TBD)" : "")
     });
   }
 
@@ -1925,33 +1929,47 @@ function renderOrdersList(orders, filter, panel, onFilter) {
     actionsDiv.className = "order-actions";
 
     if (st === "pending") {
-      // Delivery fee input for delivery orders
+      // For delivery orders - show fee input and contact reminder
       if (order.type && order.type.indexOf("Delivery") > -1) {
+        // Contact reminder
+        var contactNote = document.createElement("div");
+        contactNote.style.cssText = "width:100%;margin-bottom:10px;background:rgba(232,184,75,0.1);border:1px solid rgba(232,184,75,0.3);border-radius:4px;padding:10px 12px;font-size:0.8rem;color:#E8B84B;line-height:1.6";
+        contactNote.innerHTML = "🛵 <strong>Delivery order</strong> — Check the address, calculate distance, then contact the customer to agree on the delivery fee before confirming.";
+        actionsDiv.appendChild(contactNote);
+
+        // Delivery fee input
         var feeWrapper = document.createElement("div");
-        feeWrapper.style.cssText = "display:flex;align-items:center;gap:6px;width:100%;margin-bottom:8px;background:rgba(200,146,42,0.08);border:1px solid rgba(200,146,42,0.2);border-radius:4px;padding:8px 10px";
-        feeWrapper.innerHTML = "<span style='color:#C8A97A;font-size:0.82rem;white-space:nowrap'>Delivery fee: $</span>";
+        feeWrapper.style.cssText = "display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px;background:rgba(200,146,42,0.06);border:1px solid rgba(200,146,42,0.2);border-radius:4px;padding:10px 12px";
+        var feeSpan = document.createElement("span");
+        feeSpan.style.cssText = "color:#C8A97A;font-size:0.83rem;white-space:nowrap";
+        feeSpan.textContent = "Delivery fee agreed: $";
         var feeInp = document.createElement("input");
         feeInp.type = "number";
         feeInp.min = "0";
         feeInp.step = "0.5";
-        feeInp.value = "3.00";
+        feeInp.value = "";
         feeInp.placeholder = "0.00";
-        feeInp.style.cssText = "width:70px;padding:5px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(200,146,42,0.3);border-radius:2px;color:#E8D5B0;font-size:0.9rem;text-align:center;font-family:Lato,sans-serif";
+        feeInp.style.cssText = "width:80px;padding:6px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(200,146,42,0.3);border-radius:2px;color:#E8D5B0;font-size:0.95rem;text-align:center;font-family:Lato,sans-serif";
+        var feeNote2 = document.createElement("span");
+        feeNote2.style.cssText = "color:#7A5C3A;font-size:0.75rem";
+        feeNote2.textContent = "(will be included in confirmation email)";
+        feeWrapper.appendChild(feeSpan);
         feeWrapper.appendChild(feeInp);
-        var feeNote = document.createElement("span");
-        feeNote.style.cssText = "color:#7A5C3A;font-size:0.75rem";
-        feeNote.textContent = "(charge to customer)";
-        feeWrapper.appendChild(feeNote);
+        feeWrapper.appendChild(feeNote2);
         actionsDiv.appendChild(feeWrapper);
       }
+
       var confirmBtn = document.createElement("button");
       confirmBtn.className = "o-btn confirm";
-      confirmBtn.textContent = "Confirm Order";
+      confirmBtn.textContent = "✅ Confirm Order";
       (function(id, ord) {
         confirmBtn.addEventListener("click", function() {
           var delivFee = 0;
           var feeInput = actionsDiv.querySelector("input[type='number']");
-          if (feeInput) delivFee = parseFloat(feeInput.value) || 0;
+          if (feeInput && feeInput.value) delivFee = parseFloat(feeInput.value) || 0;
+          if (ord.type && ord.type.indexOf("Delivery") > -1 && delivFee === 0) {
+            if (!confirm("No delivery fee entered. Confirm with $0 delivery fee?")) return;
+          }
           updateOrderStatus(id, "confirmed", delivFee, ord);
         });
       })(order.id, order);
@@ -1997,53 +2015,79 @@ function renderOrdersList(orders, filter, panel, onFilter) {
 
 function updateOrderStatus(orderId, newStatus, deliveryFee, orderData) {
   if (!firebaseDB) { showToast("Firebase not connected"); return; }
+
   var updates = { status: newStatus };
   if (deliveryFee && deliveryFee > 0) updates.deliveryFee = deliveryFee;
   firebaseDB.ref("orders/" + orderId).update(updates);
-  showToast("Order " + newStatus + "!");
 
-  if (newStatus === "confirmed") {
-    firebaseDB.ref("orders/" + orderId).once("value", function(snap) {
-      var order = snap.val();
-      if (!order) return;
-      var delivNote = "";
-      var finalTotal = order.total || "$0";
-      if (deliveryFee && deliveryFee > 0) {
-        var base = parseFloat((order.total || "$0").replace("$","")) || 0;
-        var newTotal = base + deliveryFee;
-        finalTotal = "$" + newTotal.toFixed(2);
-        delivNote = "\n\nDelivery Fee: $" + deliveryFee.toFixed(2) + "\nNew Total: " + finalTotal;
-      }
-      if (order.email) {
-        emailjs.init(EJS_KEY);
-        emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
-          customer_name:  order.name,
-          customer_email: order.email,
-          order_items:    order.items + delivNote + "\n\nPAYMENT CONFIRMED — Your order is now being prepared!",
-          order_type:     order.type,
-          order_time:     order.time,
-          order_total:    finalTotal
-        });
-      }
-    });
-  }
+  firebaseDB.ref("orders/" + orderId).once("value", function(snap) {
+    var order = snap.val();
+    if (!order) { showToast("Order " + newStatus); return; }
 
-  if (newStatus === "ready") {
-    firebaseDB.ref("orders/" + orderId).once("value", function(snap) {
-      var order = snap.val();
-      if (!order || !order.email) return;
+    var base = parseFloat((order.total || "$0").replace("$","")) || 0;
+    var fee  = (deliveryFee && deliveryFee > 0) ? deliveryFee : (order.deliveryFee || 0);
+    var finalTotal = "$" + (base + fee).toFixed(2);
+
+    // Build delivery fee line
+    var feeNote = "";
+    if (fee > 0) {
+      feeNote = "\nDelivery Fee: $" + fee.toFixed(2) + "\nFinal Total: " + finalTotal;
+    }
+
+    if (newStatus === "confirmed" && order.email) {
       emailjs.init(EJS_KEY);
       emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
         customer_name:  order.name,
         customer_email: order.email,
-        order_items:    order.items + "\n\nYOUR ORDER IS READY! Please come pick it up or your delivery is on the way!",
-        order_type:     order.type,
-        order_time:     order.time,
-        order_total:    order.total
+        order_items:    "ORDER CONFIRMED\n\n" + order.items + feeNote +
+          "\n\nPlease send payment of " + finalTotal + " to:" +
+          "\nVenmo: @Saikou-Kolley" +
+          "\nCashApp: $1kolley" +
+          "\n\nInclude your name in the payment note. We will start preparing your food once payment is received!",
+        order_type:  order.type,
+        order_time:  order.time,
+        order_total: finalTotal
       });
-    });
-  }
+      showToast("Order confirmed! Customer notified.");
+    }
+
+    if (newStatus === "cancelled" && order.email) {
+      emailjs.init(EJS_KEY);
+      emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
+        customer_name:  order.name,
+        customer_email: order.email,
+        order_items:    "ORDER CANCELLED\n\n" +
+          "Unfortunately your order has been cancelled. If you made a payment, please contact us and we will process a refund.\n\n" +
+          "Original order:\n" + order.items,
+        order_type:  order.type,
+        order_time:  order.time,
+        order_total: order.total
+      });
+      showToast("Order cancelled. Customer notified.");
+    }
+
+    if (newStatus === "ready" && order.email) {
+      emailjs.init(EJS_KEY);
+      emailjs.send(EJS_SVC, EJS_TPL_RECEIPT, {
+        customer_name:  order.name,
+        customer_email: order.email,
+        order_items:    "YOUR ORDER IS READY!\n\n" + order.items +
+          "\n\n" + (order.type && order.type.indexOf("Delivery") > -1 ?
+          "Your delivery is on the way!" :
+          "Please come pick up your order. See you soon!"),
+        order_type:  order.type,
+        order_time:  order.time,
+        order_total: order.total
+      });
+      showToast("Order ready! Customer notified.");
+    }
+
+    if (!order.email) {
+      showToast("Order " + newStatus + ". No email on file - text customer!");
+    }
+  });
 }
+
 
 function buildMenuPanel() {
   var panel = document.getElementById("panel-menu");
